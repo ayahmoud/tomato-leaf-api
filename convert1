@@ -1,0 +1,38 @@
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Dropout, GlobalAveragePooling2D
+from tensorflow.keras.applications import EfficientNetB0
+import tensorflow as tf
+
+# Define number of classes (same as before)
+num_classes = 10
+
+# Rebuild the model architecture
+base_model = EfficientNetB0(weights="imagenet", include_top=False, input_shape=(300, 300, 3))
+base_model.trainable = False
+
+model = Sequential([
+    base_model,
+    GlobalAveragePooling2D(),
+    Dense(256, activation="relu"),
+    Dropout(0.4),
+    Dense(num_classes, activation="softmax")
+])
+
+# Compile and load weights
+model.compile(optimizer="adam", loss="categorical_crossentropy", metrics=["accuracy"])
+model.load_weights("eff_weights.h5")
+
+# Convert to TensorFlow Lite
+converter = tf.lite.TFLiteConverter.from_keras_model(model)
+
+# Optional: Optimize to reduce size
+converter.optimizations = [tf.lite.Optimize.DEFAULT]
+
+# Convert the model
+tflite_model = converter.convert()
+
+# Save the .tflite model to disk
+with open("eff_model.tflite", "wb") as f:
+    f.write(tflite_model)
+
+print("✅ TFLite model saved as 'eff_model.tflite'")

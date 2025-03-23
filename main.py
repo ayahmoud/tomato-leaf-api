@@ -7,46 +7,37 @@ import io
 
 app = FastAPI()
 
-# Load your TFLite model
-interpreter = tf.lite.Interpreter(model_path="model.tflite")
+# Load your updated TFLite model
+interpreter = tf.lite.Interpreter(model_path="eff_model.tflite")
 interpreter.allocate_tensors()
 
-# Get model input/output details
+# Get input/output details
 input_details = interpreter.get_input_details()
 output_details = interpreter.get_output_details()
 
-# ✅ Your original class names (replace with actual ones from training)
+# ✅ Use your actual class labels from training
 class_names = [
-    "Tomato Bacterial Spot",
-    "Tomato Early Blight",
-    "Tomato Late Blight",
-    "Tomato Leaf Mold",
-    "Tomato Septoria Leaf Spot",
-    "Tomato Spider Mite",
-    "Tomato Target Spot",
-    "Tomato Mosaic Virus",
-    "Tomato Yellow Leaf Curl Virus",
-    "Tomato Healthy"
+    "Healthy",
+    "Leaf Mold",
+    "Septoria Leaf Spot"
+    # Add more if needed
 ]
 
-# 🧠 Match training preprocessing
+# 🧠 Preprocess to match EfficientNetB0 (300x300, normalize 0–1)
 def preprocess_image(image_bytes):
     image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-    image = image.resize((224, 224))
-    image_array = np.array(image)
-    image_array = tf.keras.applications.mobilenet_v2.preprocess_input(image_array)  # match training
-    image_array = np.expand_dims(image_array, axis=0).astype(np.float32)
+    image = image.resize((300, 300))
+    image_array = np.array(image).astype(np.float32) / 255.0  # Normalized
+    image_array = np.expand_dims(image_array, axis=0)  # Add batch dim
     return image_array
 
 @app.post("/predict")
 async def predict(file: UploadFile = File(...)):
-    # Read image
+    # Read and preprocess image
     image_bytes = await file.read()
-
-    # Preprocess
     input_data = preprocess_image(image_bytes)
 
-    # Set input tensor and run inference
+    # Set input and run inference
     interpreter.set_tensor(input_details[0]['index'], input_data)
     interpreter.invoke()
 
@@ -56,13 +47,12 @@ async def predict(file: UploadFile = File(...)):
     confidence = float(np.max(output_data))
     predicted_label = class_names[prediction_index]
 
-    # Respond with results
     return {
         "prediction": prediction_index,
         "label": predicted_label,
         "confidence": round(confidence * 100, 2)
     }
 
-# Uncomment this block to run locally
+# Uncomment to run locally
 # if __name__ == "__main__":
 #     uvicorn.run(app, host="127.0.0.1", port=8000)
